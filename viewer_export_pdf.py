@@ -3,6 +3,7 @@ from playwright.sync_api import sync_playwright
 from pypdf import PdfWriter
 import time
 import os
+import re
 
 # .env 파일 로드
 load_dotenv()
@@ -10,21 +11,17 @@ load_dotenv()
 # =========================
 # 설정
 # =========================
-# 환경 변수 .env에서 읽어오기
 TARGET_URL = os.getenv("TARGET_URL")
 RAW_SAVE_DIR = os.getenv("SAVE_DIR")
 
-# 윈도우 경로 정규화 및 최종 파일 경로 설정
 SAVE_DIR = os.path.normpath(RAW_SAVE_DIR)
 FINAL_OUTPUT_PATH = os.path.join(SAVE_DIR, "final_document_complete.pdf")
 
 def export_clean_document_pdf():
-    # 저장 폴더가 없으면 생성
     if not os.path.exists(SAVE_DIR): 
         os.makedirs(SAVE_DIR)
     
     with sync_playwright() as p:
-        # 브라우저 실행 및 컨텍스트 설정
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1920, "height": 1080})
         page = context.new_page()
@@ -33,18 +30,35 @@ def export_clean_document_pdf():
         page.goto(TARGET_URL, wait_until="commit")
         time.sleep(15) # 전체 콘텐츠 로딩 대기
 
+        # [핵심 추가] 총 페이지 수 자동 파악 로직
+        print("🔍 총 페이지 수 파악 중...")
+        try:
+            # 페이지 하단 등에 있는 '1 / 133' 형태의 텍스트를 찾습니다.
+            # 캔바 뷰어의 일반적인 텍스트 패턴을 타겟팅합니다.
+            page_text = page.locator("body").inner_text()
+            # "현재페이지 / 총페이지" 패턴 추출 (예: 1 / 133)
+            match = re.search(r"(\d+)\s*/\s*(\d+)", page_text)
+            
+            if match:
+                total_pages = int(match.group(2))
+                print(f"✅ 총 {total_pages}페이지를 확인했습니다.")
+            else:
+                # 패턴을 못 찾을 경우 사용자에게 물어보거나 기본값 설정
+                total_pages = 133 # 패턴 인식 실패 시 기본값 (직접 입력 가능)
+                print(f"⚠️ 페이지 번호를 찾지 못해 기본값({total_pages})으로 진행합니다.")
+        except Exception as e:
+            total_pages = 133 
+            print(f"⚠️ 오류 발생으로 기본값({total_pages})으로 진행합니다: {e}")
+
         pdf_writer = PdfWriter()
         temp_pdf_list = []
 
-        print("🪄 인터페이스 정리 및 페이지별 추출 시작...")
-        
-        # 총 페이지 수 설정 (예: 17페이지)
-        total_pages = 17
+        print(f"🪄 인터페이스 정리 및 {total_pages}개 페이지 추출 시작...")
         
         for i in range(1, total_pages + 1):
             print(f" > [{i}/{total_pages}] 페이지 처리 중...")
             
-            # 매 페이지마다 불필요한 UI 요소를 숨기고 배경을 흰색으로 고정하는 스크립트
+            # UI 숨기기 및 배경 정리
             page.evaluate("""
                 () => {
                     const selectors = [
@@ -56,8 +70,6 @@ def export_clean_document_pdf():
                     selectors.forEach(s => {
                         document.querySelectorAll(s).forEach(el => el.style.display = 'none');
                     });
-
-                    // 배경색 강제 고정 및 그래픽 효과 제거
                     document.body.style.background = "white";
                     const rootElement = document.querySelector('#root') || document.body;
                     rootElement.style.background = "white";
@@ -66,37 +78,29 @@ def export_clean_document_pdf():
             """)
             time.sleep(1)
 
-            # 현재 슬라이드를 임시 PDF 파일로 저장
             temp_pdf_path = os.path.join(SAVE_DIR, f"temp_page_{i}.pdf")
             page.pdf(
                 path=temp_pdf_path,
-                width="1920px", 
-                height="1080px",
-                print_background=True, 
-                display_header_footer=False
+                width="1920px", height="1080px",
+                print_background=True, display_header_footer=False
             )
             
-            # 병합 리스트에 추가
             pdf_writer.append(temp_pdf_path)
             temp_pdf_list.append(temp_pdf_path)
 
-            # 마지막 페이지가 아니면 다음으로 이동
             if i < total_pages:
                 page.keyboard.press("ArrowRight")
-                time.sleep(1.5) # 전환 애니메이션 대기
+                time.sleep(1.2) # 페이지 전환 대기
 
-        # 모든 PDF 조각 병합
-        print("🔗 파일 병합 및 최적화 중...")
+        print("🔗 파일 병합 중...")
         with open(FINAL_OUTPUT_PATH, "wb") as f:
             pdf_writer.write(f)
 
-        # 사용이 끝난 임시 파일 삭제
         for temp_file in temp_pdf_list:
-            if os.path.exists(temp_file): 
-                os.remove(temp_file)
+            if os.path.exists(temp_file): os.remove(temp_file)
 
         browser.close()
-        print(f"✨ 완료! 깔끔한 PDF 문서가 저장되었습니다: {FINAL_OUTPUT_PATH}")
+        print(f"✨ 완료! 저장 경로: {FINAL_OUTPUT_PATH}")
 
 if __name__ == "__main__":
     export_clean_document_pdf()
