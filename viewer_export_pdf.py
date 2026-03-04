@@ -37,8 +37,8 @@ def export_clean_document_pdf():
         page = context.new_page()
 
         print("🚀 대상 페이지 접속 중...")
-        page.goto(TARGET_URL, wait_until="networkidle")
-        time.sleep(10)
+        page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60000)
+        time.sleep(4)
 
         # 총 페이지 수 파악
         try:
@@ -56,10 +56,10 @@ def export_clean_document_pdf():
             # 1. 실시간 프로세스 출력
             print(f" > [{i}/{total_pages}] 페이지 처리 중...")
 
-            # 2. 서버 과부하 방지 (20페이지마다 10초 휴식)
-            if i > 1 and i % 20 == 0:
-                print(f"☕ 서버 보호를 위해 잠시 멈춥니다. (10초 대기 후 재개)")
-                time.sleep(10)
+            # 2. 서버 과부하 방지 (30페이지마다 5초 휴식)
+            if i > 1 and i % 30 == 0:
+                print(f"☕ 서버 보호를 위해 잠시 멈춥니다. (5초 대기 후 재개)")
+                time.sleep(5)
 
             # 3. UI 숨기기
             page.evaluate("""() => {
@@ -68,9 +68,6 @@ def export_clean_document_pdf():
                     document.querySelectorAll(s).forEach(el => el.style.display = 'none');
                 });
             }""")
-
-            # 4. 고화질 렌더링 대기
-            time.sleep(3.0)
 
             # 5. 임시 PDF 파일 생성 (타임스탬프 없이 페이지 번호로만 고정)
             # 나중에 viewer_merge_custom.py에서 temp_page_번호.png와 매칭하기 위함입니다.
@@ -88,8 +85,7 @@ def export_clean_document_pdf():
             # 6. 다음 페이지로 이동
             if i < total_pages:
                 page.keyboard.press("ArrowRight")
-                # 페이지 전환 후 서버 안정화 대기 시간을 2.5초로 넉넉히 둡니다.
-                time.sleep(2.5)
+                time.sleep(1.0)
 
         # 7. 최종 병합 파일 생성
         print(f"🔗 초기 병합 파일 생성 중: {FINAL_OUTPUT_PATH}")
