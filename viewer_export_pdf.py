@@ -9,12 +9,10 @@ import re
 load_dotenv()
 
 TARGET_URL = os.getenv("TARGET_URL")
-RAW_SAVE_DIR = os.getenv("SAVE_DIR")
-SAVE_DIR = os.path.normpath(RAW_SAVE_DIR)
-# 임시 파일을 저장할 전용 폴더 설정
-TEMP_DIR = os.path.join(SAVE_DIR, "temp")
 # 최종 산출물 저장 폴더 (프로젝트 내 output/)
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+# 임시 파일을 저장할 전용 폴더 설정
+TEMP_DIR = os.path.join(OUTPUT_DIR, "temp")
 
 def get_unique_filename(directory, base_filename):
     name, ext = os.path.splitext(base_filename)
@@ -30,7 +28,6 @@ FINAL_OUTPUT_PATH = get_unique_filename(OUTPUT_DIR, "final_document_complete.pdf
 
 def export_clean_document_pdf():
     # 저장 폴더 및 템프 폴더 생성
-    if not os.path.exists(SAVE_DIR): os.makedirs(SAVE_DIR)
     if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
     if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
 

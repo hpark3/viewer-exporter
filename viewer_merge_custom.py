@@ -5,9 +5,8 @@ from pypdf import PdfWriter
 from dotenv import load_dotenv
 
 load_dotenv()
-RAW_SAVE_DIR = os.getenv("SAVE_DIR")
-SAVE_DIR = os.path.normpath(RAW_SAVE_DIR)
-TEMP_DIR = os.path.join(SAVE_DIR, "temp")
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+TEMP_DIR = os.path.join(OUTPUT_DIR, "temp")
 
 def get_unique_filename(directory, base_filename):
     name, ext = os.path.splitext(base_filename)
@@ -25,7 +24,7 @@ def merge_with_custom_captures():
         return
 
     # 결과 파일 저장 경로 (자동 넘버링 포함)
-    output_path = get_unique_filename(SAVE_DIR, "final_document_fixed.pdf")
+    output_path = get_unique_filename(OUTPUT_DIR, "final_document_fixed.pdf")
     pdf_writer = PdfWriter()
 
     # 1. temp 폴더 내의 모든 PDF 파일을 수집

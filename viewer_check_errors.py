@@ -7,10 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 POPPLER_BIN_PATH = r"C:\poppler\Library\bin"
-RAW_SAVE_DIR = os.getenv("SAVE_DIR")
-SAVE_DIR = os.path.normpath(RAW_SAVE_DIR)
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 PDF_FILE_NAME = os.getenv("PDF_FILE_NAME", "final_document_complete.pdf")
-PDF_PATH = os.path.join(SAVE_DIR, PDF_FILE_NAME)
+PDF_PATH = os.path.join(OUTPUT_DIR, PDF_FILE_NAME)
 
 def is_loading_error(img_array):
     """
