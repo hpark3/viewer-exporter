@@ -13,6 +13,8 @@ RAW_SAVE_DIR = os.getenv("SAVE_DIR")
 SAVE_DIR = os.path.normpath(RAW_SAVE_DIR)
 # 임시 파일을 저장할 전용 폴더 설정
 TEMP_DIR = os.path.join(SAVE_DIR, "temp")
+# 최종 산출물 저장 폴더 (프로젝트 내 output/)
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 
 def get_unique_filename(directory, base_filename):
     name, ext = os.path.splitext(base_filename)
@@ -24,21 +26,22 @@ def get_unique_filename(directory, base_filename):
         counter += 1
     return final_path
 
-FINAL_OUTPUT_PATH = get_unique_filename(SAVE_DIR, "final_document_complete.pdf")
+FINAL_OUTPUT_PATH = get_unique_filename(OUTPUT_DIR, "final_document_complete.pdf")
 
 def export_clean_document_pdf():
     # 저장 폴더 및 템프 폴더 생성
     if not os.path.exists(SAVE_DIR): os.makedirs(SAVE_DIR)
     if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
-    
+    if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1920, "height": 1080})
         page = context.new_page()
 
         print("🚀 대상 페이지 접속 중...")
-        page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60000)
-        time.sleep(4)
+        page.goto(TARGET_URL, wait_until="networkidle")
+        time.sleep(10)
 
         # 총 페이지 수 파악
         try:
@@ -56,10 +59,10 @@ def export_clean_document_pdf():
             # 1. 실시간 프로세스 출력
             print(f" > [{i}/{total_pages}] 페이지 처리 중...")
 
-            # 2. 서버 과부하 방지 (30페이지마다 5초 휴식)
-            if i > 1 and i % 30 == 0:
-                print(f"☕ 서버 보호를 위해 잠시 멈춥니다. (5초 대기 후 재개)")
-                time.sleep(5)
+            # 2. 서버 과부하 방지 (20페이지마다 10초 휴식)
+            if i > 1 and i % 20 == 0:
+                print(f"☕ 서버 보호를 위해 잠시 멈춥니다. (10초 대기 후 재개)")
+                time.sleep(10)
 
             # 3. UI 숨기기
             page.evaluate("""() => {
@@ -69,15 +72,18 @@ def export_clean_document_pdf():
                 });
             }""")
 
+            # 4. 고화질 렌더링 대기
+            time.sleep(3.0)
+
             # 5. 임시 PDF 파일 생성 (타임스탬프 없이 페이지 번호로만 고정)
             # 나중에 viewer_merge_custom.py에서 temp_page_번호.png와 매칭하기 위함입니다.
             temp_pdf_name = f"temp_page_{i}.pdf"
             temp_pdf_path = os.path.join(TEMP_DIR, temp_pdf_name)
-            
+
             # 기존 동일 번호 파일이 있으면 삭제하여 최신화
             if os.path.exists(temp_pdf_path):
                 os.remove(temp_pdf_path)
-            
+
             # PDF 저장
             page.pdf(path=temp_pdf_path, width="1920px", height="1080px", print_background=True)
             pdf_writer.append(temp_pdf_path)
@@ -85,7 +91,8 @@ def export_clean_document_pdf():
             # 6. 다음 페이지로 이동
             if i < total_pages:
                 page.keyboard.press("ArrowRight")
-                time.sleep(1.0)
+                # 페이지 전환 후 서버 안정화 대기 시간을 2.5초로 넉넉히 둡니다.
+                time.sleep(2.5)
 
         # 7. 최종 병합 파일 생성
         print(f"🔗 초기 병합 파일 생성 중: {FINAL_OUTPUT_PATH}")
