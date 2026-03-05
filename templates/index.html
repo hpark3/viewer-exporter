@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canva PDF Saver</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f12;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 14px;
+    }
+
+    /* 헤더 */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header .logo { font-size: 22px; }
+    .header h1 { font-size: 16px; font-weight: 700; color: #fff; }
+    .header .badge {
+      margin-left: auto;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 99px;
+      background: #1e2030;
+      color: #64748b;
+    }
+    .header .badge.running {
+      background: #1a3a2a;
+      color: #4ade80;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    /* URL 입력 */
+    .url-row {
+      display: flex;
+      gap: 8px;
+    }
+    .url-row input {
+      flex: 1;
+      background: #1e2030;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      color: #94a3b8;
+      font-size: 12px;
+      padding: 8px 12px;
+      outline: none;
+      min-width: 0;
+    }
+    .url-row input:focus { border-color: #6366f1; color: #e2e8f0; }
+
+    /* 버튼 */
+    #startBtn {
+      padding: 8px 20px;
+      border-radius: 8px;
+      border: none;
+      background: #6366f1;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+    #startBtn:hover:not(:disabled) { background: #4f46e5; }
+    #startBtn:disabled {
+      background: #2d3148;
+      color: #475569;
+      cursor: not-allowed;
+    }
+
+    /* 구분선 */
+    hr { border: none; border-top: 1px solid #1e2030; }
+
+    /* 로그 영역 */
+    .log-header {
+      font-size: 11px;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #logBox {
+      flex: 1;
+      background: #0a0a0e;
+      border: 1px solid #1e2030;
+      border-radius: 8px;
+      padding: 12px;
+      overflow-y: auto;
+      font-family: 'Consolas', 'Menlo', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #94a3b8;
+    }
+    #logBox .line { white-space: pre-wrap; word-break: break-all; }
+    #logBox .line.done  { color: #4ade80; font-weight: 700; }
+    #logBox .line.error { color: #f87171; }
+    #logBox .line.info  { color: #60a5fa; }
+    #logBox .placeholder { color: #2d3148; text-align: center; margin-top: 40px; }
+
+    /* 완료 배너 */
+    #doneBanner {
+      display: none;
+      background: #1a3a2a;
+      border: 1px solid #166534;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #4ade80;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 헤더 -->
+  <div class="header">
+    <span class="logo">🎨</span>
+    <h1>Canva PDF Saver</h1>
+    <span class="badge" id="statusBadge">대기 중</span>
+  </div>
+
+  <!-- URL 입력 + 시작 버튼 -->
+  <div class="url-row">
+    <input type="text" id="urlInput" placeholder="https://www.canva.com/design/..." value="{{ url }}">
+    <button id="startBtn" onclick="startJob()">▶ 저장 시작</button>
+  </div>
+
+  <hr>
+  <span class="log-header">실시간 로그</span>
+
+  <!-- 로그 -->
+  <div id="logBox">
+    <div class="placeholder">▶ 저장 시작을 눌러주세요</div>
+  </div>
+
+  <!-- 완료 배너 -->
+  <div id="doneBanner">🎉 PDF 저장 완료! 탐색기에서 확인하세요.</div>
+
+  <script>
+    let evtSource = null;
+
+    function startJob() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) { alert('URL을 입력해주세요.'); return; }
+
+      // UI 초기화
+      const logBox = document.getElementById('logBox');
+      logBox.innerHTML = '';
+      document.getElementById('doneBanner').style.display = 'none';
+      setRunning(true);
+
+      fetch('/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          appendLine('⚠️ ' + data.error, 'error');
+          setRunning(false);
+          return;
+        }
+        // SSE 연결
+        if (evtSource) evtSource.close();
+        evtSource = new EventSource('/stream');
+        evtSource.onmessage = (e) => {
+          const line = e.data;
+          if (line === '__DONE__') {
+            evtSource.close();
+            setRunning(false);
+            document.getElementById('doneBanner').style.display = 'block';
+            return;
+          }
+          appendLine(line);
+        };
+        evtSource.onerror = () => {
+          evtSource.close();
+          setRunning(false);
+        };
+      })
+      .catch(err => {
+        appendLine('💥 연결 실패: ' + err, 'error');
+        setRunning(false);
+      });
+    }
+
+    function appendLine(text, cls) {
+      const logBox = document.getElementById('logBox');
+      const div = document.createElement('div');
+      div.className = 'line' + (cls ? ' ' + cls : '');
+
+      // 색상 자동 분류
+      if (!cls) {
+        if (text.includes('❌') || text.includes('💥') || text.includes('오류')) div.className += ' error';
+        else if (text.includes('🚀') || text.includes('🔍') || text.includes('📎')) div.className += ' info';
+        else if (text.includes('🎉') || text.includes('✅') || text.includes('✨')) div.className += ' done';
+      }
+
+      div.textContent = text;
+      logBox.appendChild(div);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function setRunning(running) {
+      const btn = document.getElementById('startBtn');
+      const badge = document.getElementById('statusBadge');
+      btn.disabled = running;
+      btn.textContent = running ? '⏳ 실행 중...' : '▶ 저장 시작';
+      badge.textContent = running ? '실행 중' : '대기 중';
+      badge.className = 'badge' + (running ? ' running' : '');
+    }
+
+    // 페이지 로드 시 URL이 있으면 자동으로 포커스
+    window.onload = () => {
+      const input = document.getElementById('urlInput');
+      if (input.value) input.select();
+      else input.focus();
+    };
+  </script>
+</body>
+</html>
